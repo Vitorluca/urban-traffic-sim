@@ -49,12 +49,12 @@ cruzamento_t cruzamentos[NUM_CRUZAMENTOS]; // cria um vetor de cruzamentos
 void vAssertCalled(unsigned long ulLine, const char * const pcFileName) {
     // Loop infinito em caso de falha
     while (1) {
-        // Você pode adicionar um breakpoint aqui se estiver depurando
+        
     }
 }
 
 void vApplicationIdleHook(void) {
-    // Esta função pode estar vazia se você não precisar de ações durante o estado ocioso
+    // função de ações durante o estado ocioso
 }
 
 
