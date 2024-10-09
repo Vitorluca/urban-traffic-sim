@@ -7,7 +7,7 @@
 #include <stdbool.h>
 
 #define NUM_CRUZAMENTOS 4
-#define NUM_VEICULOS 4
+#define NUM_VEICULOS 10
 #define DISTANCIA_CRUZAMENTO 500 // metros
 
 typedef struct {
@@ -40,8 +40,6 @@ void vCruzamentoTask(void *pvParameters);
 void vVeiculoTask(void *pvParameters);
 void criarCruzamentos(void);
 float calcularTempoPercurso(float velocidade);
-char obterFaseSemaforica(cruzamento_t *cruzamento);
-cruzamento_t* selecionarProximoCruzamento(cruzamento_t *atual);
 
 extern void vAssertCalled(unsigned long ulLine, const char * const pcFileName); //funcao acerções??
 void vApplicationIdleHook(void); //funcao ocioso
@@ -59,6 +57,8 @@ void vApplicationIdleHook(void) {
     // função de ações durante o estado ocioso
 }
 
+
+
 // Função que cria as tarefas dos cruzamentos
 void criarCruzamentos() {
     // Inicializando cruzamentos e semáforos
@@ -75,6 +75,13 @@ void criarCruzamentos() {
         cruzamentos[i].NS_Left = xSemaphoreCreateBinary();
         cruzamentos[i].EW_Left = xSemaphoreCreateBinary();
         cruzamentos[i].XX_Straight = xSemaphoreCreateBinary();
+
+        // Inicializa os semáforos de movimento como livres
+        // xSemaphoreGive(cruzamentos[i].NS_Straight);
+        // xSemaphoreGive(cruzamentos[i].EW_Straight);
+        // xSemaphoreGive(cruzamentos[i].NS_Left);
+        // xSemaphoreGive(cruzamentos[i].EW_Left);
+        // xSemaphoreGive(cruzamentos[i].XX_Straight);
 
         // Cria a tarefa do cruzamento
         xTaskCreate(vCruzamentoTask, 
@@ -129,45 +136,6 @@ float calcularTempoPercurso(float velocidade) {
     return DISTANCIA_CRUZAMENTO / velocidade_ms;
 }
 
-// Função que obtém a fase semafórica atual de um cruzamento
-char obterFaseSemaforica(cruzamento_t *cruzamento) {
-    if (xSemaphoreTake(cruzamento->NS_Straight, 0)) {
-        xSemaphoreGive(cruzamento->NS_Straight);
-        return 'N'; // NS-Straight e EW-Left
-    } else if (xSemaphoreTake(cruzamento->EW_Straight, 0)) {
-        xSemaphoreGive(cruzamento->EW_Straight);
-        return 'E'; // EW-Straight e NS-Left
-    } else if (xSemaphoreTake(cruzamento->XX_Straight, 0)) {
-        xSemaphoreGive(cruzamento->XX_Straight);
-        return 'X'; // XX-Straight (direita)
-    }
-    return 'U'; // Indeterminado
-}
-
-// Função que seleciona o próximo cruzamento com base na localização atual
-cruzamento_t* selecionarProximoCruzamento(cruzamento_t *atual) {
-    cruzamento_t *proximo = NULL;
-    switch (atual->id) {
-        case 'A':
-            // Pode se mover para B (direita) ou C (baixo)
-            proximo = (rand() % 2 == 0) ? &cruzamentos[1] : &cruzamentos[2];
-            break;
-        case 'B':
-            // Pode se mover para A (esquerda) ou D (baixo)
-            proximo = (rand() % 2 == 0) ? &cruzamentos[0] : &cruzamentos[3];
-            break;
-        case 'C':
-            // Pode se mover para A (cima) ou D (direita)
-            proximo = (rand() % 2 == 0) ? &cruzamentos[0] : &cruzamentos[3];
-            break;
-        case 'D':
-            // Pode se mover para B (cima) ou C (esquerda)
-            proximo = (rand() % 2 == 0) ? &cruzamentos[1] : &cruzamentos[2];
-            break;
-    }
-    return proximo;
-}
-
 // Função de tarefa que representa um veículo
 void vVeiculoTask(void *pvParameters) {
     veiculo_t *veiculo = (veiculo_t *)pvParameters;
@@ -189,47 +157,33 @@ void vVeiculoTask(void *pvParameters) {
                veiculo->id, veiculo->cruzamento->id, veiculo->movimento, veiculo->velocidade, veiculo->tempo_percurso);
 
         // Verifica o semáforo e se o movimento é permitido
-        while (1) {
-            char fase = obterFaseSemaforica(veiculo->cruzamento);
-            if ((veiculo->movimento == 'F' && fase == 'N') ||
-                (veiculo->movimento == 'L' && fase == 'E') ||
-                (veiculo->movimento == 'R' && fase == 'X')) {
-                // Movimento permitido na fase atual
-                if (veiculo->movimento == 'F' && xSemaphoreTake(veiculo->cruzamento->NS_Straight, portMAX_DELAY)) {
-                    printf("Veículo %d atravessou o cruzamento %c em frente\n", 
-                           veiculo->id, veiculo->cruzamento->id);
-                    vTaskDelay(pdMS_TO_TICKS(veiculo->tempo_percurso * 1000)); // Atravessa o cruzamento
-                    xSemaphoreGive(veiculo->cruzamento->NS_Straight);
-                    break;
-                } else if (veiculo->movimento == 'L' && xSemaphoreTake(veiculo->cruzamento->NS_Left, portMAX_DELAY)) {
-                    printf("Veículo %d virou à esquerda no cruzamento %c\n", 
-                           veiculo->id, veiculo->cruzamento->id);
-                    vTaskDelay(pdMS_TO_TICKS(veiculo->tempo_percurso * 1000)); // Atravessa o cruzamento
-                    xSemaphoreGive(veiculo->cruzamento->NS_Left);
-                    break;
-                } else if (veiculo->movimento == 'R' && xSemaphoreTake(veiculo->cruzamento->XX_Straight, portMAX_DELAY)) {
-                    printf("Veículo %d virou à direita no cruzamento %c\n", 
-                           veiculo->id, veiculo->cruzamento->id);
-                    vTaskDelay(pdMS_TO_TICKS(veiculo->tempo_percurso * 1000)); // Atravessa o cruzamento
-                    xSemaphoreGive(veiculo->cruzamento->XX_Straight);
-                    break;
-                }
-            } else {
-                // Movimento não permitido, aguarda a mudança de fase
-                vTaskDelay(pdMS_TO_TICKS(1000)); // Aguarda 1 segundo antes de verificar novamente
+        if (veiculo->movimento == 'F') {
+            // Verifica semáforo NS_Straight
+            if (xSemaphoreTake(veiculo->cruzamento->NS_Straight, portMAX_DELAY)) {
+                printf("Veículo %d atravessou o cruzamento %c em frente\n", 
+                       veiculo->id, veiculo->cruzamento->id);
+                vTaskDelay(pdMS_TO_TICKS(veiculo->tempo_percurso * 1000)); // Atravessa o cruzamento
+                xSemaphoreGive(veiculo->cruzamento->NS_Straight);
+            }
+        } else if (veiculo->movimento == 'L') {
+            // Verifica semáforo NS_Left
+            if (xSemaphoreTake(veiculo->cruzamento->NS_Left, portMAX_DELAY)) {
+                printf("Veículo %d virou à esquerda no cruzamento %c\n", 
+                       veiculo->id, veiculo->cruzamento->id);
+                vTaskDelay(pdMS_TO_TICKS(veiculo->tempo_percurso * 1000)); // Atravessa o cruzamento
+                xSemaphoreGive(veiculo->cruzamento->NS_Left);
+            }
+        } else if (veiculo->movimento == 'R') {
+            // Verifica semáforo XX_Straight
+            if (xSemaphoreTake(veiculo->cruzamento->XX_Straight, portMAX_DELAY)) {
+                printf("Veículo %d virou à direita no cruzamento %c\n", 
+                       veiculo->id, veiculo->cruzamento->id);
+                vTaskDelay(pdMS_TO_TICKS(veiculo->tempo_percurso * 1000)); // Atravessa o cruzamento
+                xSemaphoreGive(veiculo->cruzamento->XX_Straight);
             }
         }
 
-        // Seleciona o próximo cruzamento ou finaliza a jornada
-        if (rand() % 2 == 0 && veiculo->movimento != 'F') {
-            veiculo->cruzamento = selecionarProximoCruzamento(veiculo->cruzamento);
-            printf("Veículo %d se dirigindo ao próximo cruzamento %c\n", veiculo->id, veiculo->cruzamento->id);
-        } else {
-            printf("Veículo %d finalizou sua jornada\n", veiculo->id);
-            vTaskDelete(NULL); // Finaliza a tarefa do veículo
-        }
-
-        // Espera um tempo aleatório antes de gerar o próximo movimento
+        // Espera um tempo aleatório antes de gerar o próximo veículo
         vTaskDelay(pdMS_TO_TICKS(rand() % 3000 + 2000)); // Espera entre 2 e 5 segundos
     }
 }
@@ -242,6 +196,20 @@ int main(void) {
     srand(time(NULL)); // Inicializa o gerador de números aleatórios
 
     criarCruzamentos(); // Cria os cruzamentos e as tarefas
+
+    // Cria veículos
+    // for (int i = 0; i < NUM_VEICULOS; i++) {
+    //     veiculo_t *veiculo = (veiculo_t *)malloc(sizeof(veiculo_t));
+    //     veiculo->id = i + 1; // ID do veículo começa em 1
+    //     veiculo->cruzamento = &cruzamentos[rand() % NUM_CRUZAMENTOS]; // Atribui um cruzamento aleatório
+    //     veiculo->movimento = (rand() % 3) == 0 ? 'L' : (rand() % 3) == 1 ? 'R' : 'F'; // Movimento aleatório
+    //     xTaskCreate(vVeiculoTask, 
+    //                 "Veiculo Task", 
+    //                 configMINIMAL_STACK_SIZE, 
+    //                 veiculo, // Passa o veículo como parâmetro
+    //                 2, 
+    //                 NULL);
+    // }
 
     // Cria veículos
     for (int i = 0; i < NUM_VEICULOS; i++) {

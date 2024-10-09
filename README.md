@@ -36,6 +36,18 @@ make
 
 Este projeto implementa um simulador de controle de tráfego utilizando o FreeRTOS para gerenciar a sincronização entre cruzamentos, semáforos e veículos. O código simula o fluxo de veículos em uma rede urbana com quatro cruzamentos interligados, onde cada cruzamento contém quatro semáforos e as vias podem ser Norte-Sul (NS) ou Leste-Oeste (EW).
 
+# Ilustração da rede de cruzamentos com distâncias
+
+```python
+[ Cruzamento A ] --500m-- [ Cruzamento B ]
+       |                         |
+     500m                      500m
+       |                         |
+[ Cruzamento C ] --500m-- [ Cruzamento D ]
+```
+
+
+
 ## Estrutura do Código
 
 ### Definições e Tipos
